@@ -1,35 +1,42 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { WebSocket, MessageEvent } from 'ws';
+import { NextRequest } from 'next/server';
 
-const connections = new Set<WebSocket>();
+export const runtime = 'edge';
+
+interface WebSocketConnection {
+  send: (data: string) => void;
+  close: () => void;
+}
+
+const connections = new Set<WebSocketConnection>();
 
 export async function GET(req: NextRequest) {
   if (!req.headers.get('upgrade')?.toLowerCase().includes('websocket')) {
-    return NextResponse.json({ error: 'Expected a WebSocket request' }, { status: 400 });
+    return new Response('Expected a WebSocket connection', { status: 400 });
   }
 
-  const socket = new WebSocket(null);
+  try {
+    // @ts-expect-error - WebSocketPair is available in Edge runtime
+    const { socket, response } = new WebSocketPair();
+    
+    socket.accept();
+    connections.add(socket);
 
-  connections.add(socket);
-
-  socket.onmessage = (event: MessageEvent) => {
-    const message = event.data;
-    connections.forEach((conn) => {
-      if (conn !== socket) {
-        conn.send(message);
-      }
+    socket.addEventListener('message', async (event: { data: string }) => {
+      const message = event.data;
+      connections.forEach((conn) => {
+        if (conn !== socket) {
+          conn.send(message);
+        }
+      });
     });
-  }
 
-  socket.onclose = () => {
-    connections.delete(socket);
-  }
+    socket.addEventListener('close', () => {
+      connections.delete(socket);
+    });
 
-  return new Response(null, {
-    status: 101,
-    headers: {
-      'Upgrade': 'websocket',
-      'Connection': 'Upgrade'
-    }
-  });
+    return response;
+  } catch (err) {
+    console.error('WebSocket connection error:', err);
+    return new Response('Failed to establish WebSocket connection', { status: 500 });
+  }
 }

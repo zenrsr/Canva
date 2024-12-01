@@ -33,21 +33,31 @@ const Canvas: React.FC = () => {
     ]);
   };
 
-  const handleDrag = (id: string, newStyle: React.CSSProperties) => {
+  const handleDrag = (id: string, e: React.DragEvent<HTMLDivElement>) => {
     saveState();
+    const newStyle: React.CSSProperties = {
+      top: e.clientY,
+      left: e.clientX,
+      position: "absolute" as const,
+    };
     setElements(
-      elements.map((el) => (el.id === id ? { ...el, style: newStyle } : el))
+      elements.map((el) => (el.id === id ? { ...el, style: { ...el.style, ...newStyle } } : el))
     );
   };
 
-  const exportAsImage = () => {
-    if (canvasRef.current) {
-      toPng(canvasRef.current).then((dataUrl) => {
-        const link = document.createElement("a");
-        link.href = dataUrl;
-        link.download = "canvas.png";
-        link.click();
-      });
+  const exportAsImage = async () => {
+    try {
+      if (!canvasRef.current) {
+        throw new Error('Canvas reference not found');
+      }
+      const dataUrl = await toPng(canvasRef.current);
+      const link = document.createElement("a");
+      link.href = dataUrl;
+      link.download = "canvas.png";
+      link.click();
+    } catch (error) {
+      console.error('Failed to export image:', error);
+      // You might want to add proper error handling UI here
     }
   };
 
@@ -84,13 +94,7 @@ const Canvas: React.FC = () => {
             className="absolute"
             style={el.style}
             draggable
-            onDragEnd={(e) =>
-              handleDrag(el.id, {
-                top: e.clientY,
-                left: e.clientX,
-                position: "absolute",
-              })
-            }
+            onDragEnd={(e) => handleDrag(el.id, e)}
           >
             {el.type === "text" && (
               <div contentEditable className="text-black">
